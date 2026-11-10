@@ -1,3 +1,5 @@
+// 静态文件读写工具，路径相对于进程当前工作目录。
+// 打开失败时抛 system_error；聊天服务器用它读取 static/ 下的页面和图标。
 #pragma once
 
 #include <fstream>
@@ -5,6 +7,7 @@
 #include <string_view>
 #include <algorithm>
 
+// 读取整个文件；打开失败抛 system_error。
 inline std::string file_get_content(std::string const &path) {
     std::ifstream file(path);
     if (!file.is_open()) {
@@ -14,6 +17,7 @@ inline std::string file_get_content(std::string const &path) {
     return content;
 }
 
+// 写入整个文件；打开失败抛 system_error。
 inline void file_put_content(std::string const &path, std::string_view content) {
     std::ofstream file(path);
     if (!file.is_open()) {

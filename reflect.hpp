@@ -1,6 +1,8 @@
+// JSON 值模型、解析/编码器与 REFLECT 宏，让普通结构体直接参与 JSON 序列化。
+// JsonTrait<T> 是类型分派入口；容器走内置特化，带 REFLECT 的结构体走成员协议。
 #pragma once
 
-#include <array> 
+#include <array>
 #include <cstddef> 
 #include <cstdint> 
 #include <map> 
@@ -15,6 +17,7 @@
 #include <vector> 
 
 namespace reflect {
+// 宏机器：数出字段个数，再用 FOREACH_0..25 逐个展开；MSVC 传统预处理器不支持。
 #if defined(_MSC_VER) && (!defined(_MSVC_TRADITIONAL) || _MSVC_TRADITIONAL)
 # define REFLECT(...) \
      __pragma(message("Please turn on /Zc:preprocessor before using " \
@@ -168,6 +171,7 @@ namespace reflect {
          REFLECT__GLOBAL_ON_EACH, \
          __VA_ARGS__)} REFLECT_GLOBAL_TEMPLATED__EXTRA(__VA_ARGS__)
 #endif
+// JSON 值模型：variant 表示七种类型，对象和数组用 unique_ptr 递归持有子节点。
 struct JsonValue {
     using Ptr = std::unique_ptr<JsonValue>;
     using Null = std::monostate;
@@ -181,10 +185,12 @@ struct JsonValue {
         std::variant<Null, String, Dict, Array, Integer, Real, Boolean>;
     Union inner;
 
+    // 用指定类型和值原地构造节点。
     template <class T>
     explicit JsonValue(std::in_place_type_t<T>, T &&value)
         : inner(std::in_place_type<T>, std::move(value)) {}
 
+    // 工厂函数：在堆上创建节点并返回独占指针。
     template <class T>
     static Ptr make(T value) {
         return std::make_unique<JsonValue>(std::in_place_type<T>,
@@ -244,14 +250,17 @@ struct JsonValue {
 
 struct JsonEncoder;
 
+// 类型分派入口：未特化的类型在这里编译期报错，提示补 REFLECT。
 template <class T, class = void>
 struct JsonTrait {
+    // 未特化类型不能编码。
     static void putValue(JsonEncoder *encoder, T const &value) {
         static_assert(!std::is_same_v<T, T>,
                       "the given type contains members that are not reflected, "
                       "please add REFLECT macro to it");
     }
 
+    // 未特化类型不能解码。
     static bool getValue(JsonValue::Union &data, T &value,
                          std::error_code &ec) {
         static_assert(!std::is_same_v<T, T>,
@@ -261,23 +270,28 @@ struct JsonTrait {
     }
 };
 
+// 把值写进 std::string 的 JSON 编码器；字符串转义在这里完成。
 struct JsonEncoder {
     std::string json;
 
+    // 追加一个字符。
     void put(char c) {
         json.push_back(c);
     }
 
+    // 追加一段原始文本，不做转义。
     void put(char const *s, std::size_t len) {
         json.append(s, len);
     }
 
+    // 写带引号的键名，键名不做转义。
     void putLiterialString(char const *name) {
         put('"');
         json.append(name);
         put('"');
     }
 
+    // 写带引号的字符串，转义换行、制表、反斜杠、引号和控制字符。
     void putString(char const *name, std::size_t len) {
         put('"');
         for (char const *it = name, *ep = name + len; it != ep; ++it) {
@@ -304,16 +318,19 @@ struct JsonEncoder {
         put('"');
     }
 
+    // 数字直接转成字符串。
     template <class T>
     void putArithmetic(T const &value) {
         json.append(std::to_string(value));
     }
 
+    // 编码单入口：把类型分派交给 JsonTrait<T>。
     template <class T>
     void putValue(T const &value) {
         JsonTrait<T>::putValue(this, value);
     }
 };
+// JSON 解析/解码错误码，配合 jsonCategory 转成可读文本。
 enum class JsonError : int {
     Success = 0,
     NullEntry,
@@ -327,6 +344,7 @@ enum class JsonError : int {
     NotImplemented,
 };
 
+// 返回 JSON 错误分类单例。
 inline std::error_category const &jsonCategory() {
     static struct final : std::error_category {
         char const *name() const noexcept override {
@@ -356,10 +374,13 @@ inline std::error_category const &jsonCategory() {
     return instance;
 }
 
+// 把 JsonError 包装成 std::error_code。
 inline std::error_code make_error_code(JsonError e) {
     return std::error_code(static_cast<int>(e), jsonCategory());
 }
 
+// 递归下降解析器：原地推进 json，失败时写 ec 并返回 nullptr。
+// 返回时 json 已越过本次解析的 token，调用方可以继续解析下一个值。
 inline JsonValue::Ptr jsonParse(std::string_view &json, std::error_code &ec) {
     using namespace std::string_view_literals;
     JsonValue::Ptr current;
@@ -370,7 +391,7 @@ inline JsonValue::Ptr jsonParse(std::string_view &json, std::error_code &ec) {
     }
     json.remove_prefix(nonempty);
     char c = json.front();
-    if (c == '"') {
+    if (c == '"') { // 字符串：处理转义和 \uXXXX
         json.remove_prefix(1);
         std::string str;
         unsigned int phase = 0;
@@ -481,7 +502,7 @@ inline JsonValue::Ptr jsonParse(std::string_view &json, std::error_code &ec) {
         }
         json.remove_prefix(i + 1);
         current = JsonValue::make<JsonValue::String>(std::move(str));
-    } else if (c == '{') {
+    } else if (c == '{') { // 对象：键必须是字符串
         json.remove_prefix(1);
         std::map<std::string, JsonValue::Ptr> dict;
         for (;;) {
@@ -528,7 +549,7 @@ inline JsonValue::Ptr jsonParse(std::string_view &json, std::error_code &ec) {
             }
         }
         current = JsonValue::make<JsonValue::Dict>(std::move(dict));
-    } else if (c == '[') {
+    } else if (c == '[') { // 数组：递归解析每个元素
         json.remove_prefix(1);
         std::vector<JsonValue::Ptr> array;
         for (;;) {
@@ -553,7 +574,7 @@ inline JsonValue::Ptr jsonParse(std::string_view &json, std::error_code &ec) {
             }
         }
         current = JsonValue::make<JsonValue::Array>(std::move(array));
-    } else if (('0' <= c && c <= '9') || c == '.' || c == '-' || c == '+') {
+    } else if (('0' <= c && c <= '9') || c == '.' || c == '-' || c == '+') { // 数字：含小数点按 Real，否则按 Integer
         auto end = json.find_first_of(",]}"sv);
         if (end == json.npos) {
             end = json.size();
@@ -579,21 +600,21 @@ inline JsonValue::Ptr jsonParse(std::string_view &json, std::error_code &ec) {
             current = JsonValue::make<JsonValue::Integer>(value);
         }
         json.remove_prefix(end);
-    } else if (c == 't') {
+    } else if (c == 't') { // true
         if (json.substr(0, 4) != "true"sv) {
             ec = make_error_code(JsonError::UnexpectedToken);
             return nullptr;
         }
         current = JsonValue::make<JsonValue::Boolean>(true);
         json.remove_prefix(4);
-    } else if (c == 'f') {
+    } else if (c == 'f') { // false
         if (json.substr(0, 5) != "false"sv) {
             ec = make_error_code(JsonError::UnexpectedToken);
             return nullptr;
         }
         current = JsonValue::make<JsonValue::Boolean>(false);
         json.remove_prefix(5);
-    } else if (c == 'n') {
+    } else if (c == 'n') { // null
         if (json.substr(0, 4) != "null"sv) {
             ec = make_error_code(JsonError::UnexpectedToken);
             return nullptr;
@@ -607,10 +628,12 @@ inline JsonValue::Ptr jsonParse(std::string_view &json, std::error_code &ec) {
     return current;
 }
 
+// 编码反射器：REFLECT 宏对每个字段调用它，负责写键名、冒号和值。
 struct ReflectorJsonEncode {
     JsonEncoder *encoder;
     bool comma = false;
 
+    // 写一个字段；除第一个字段外先补逗号。
     template <class T>
     void operator()(char const *name, T &value) {
         if (!comma) {
@@ -624,11 +647,13 @@ struct ReflectorJsonEncode {
     }
 };
 
+// 解码反射器：按字段名在 JSON 对象里查找，并把值交给对应 JsonTrait。
 struct ReflectorJsonDecode {
     JsonValue::Dict *currentDict;
     std::error_code ec{};
     bool failed = false;
 
+    // 解一个字段；缺字段时传 null，交给 trait 产生 NullEntry。
     template <class T>
     void operator()(char const *name, T &value) {
         if (failed) {
@@ -643,6 +668,7 @@ struct ReflectorJsonDecode {
         }
     }
 
+    // 记录类型不匹配：null 报 NullEntry，其余报 TypeMismatch。
     static void typeMismatch(char const *expect, JsonValue::Union const &inner,
                              std::error_code &ec) {
         if (std::holds_alternative<JsonValue::Null>(inner)) {
@@ -686,6 +712,7 @@ struct ReflectorJsonDecode {
     }
 };
 
+// 指针语义：空指针编码成 null，非空时解引用后交给元素类型。
 struct JsonTraitPointerLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -706,6 +733,7 @@ struct JsonTraitPointerLike {
     }
 };
 
+// 数组语义：逐个元素编码；解码时对容器 emplace_back。
 struct JsonTraitArrayLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -745,6 +773,7 @@ struct JsonTraitArrayLike {
     }
 };
 
+// 字典语义：键值对编码；解码时按 try_emplace 填入映射。
 struct JsonTraitDictLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -786,6 +815,7 @@ struct JsonTraitDictLike {
     }
 };
 
+// 字符串语义：编码复用 JsonEncoder 的转义，解码要求 JSON string。
 struct JsonTraitStringLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -805,6 +835,7 @@ struct JsonTraitStringLike {
     }
 };
 
+// null 语义：只接受 JSON null。
 struct JsonTraitNullLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -823,6 +854,7 @@ struct JsonTraitNullLike {
     }
 };
 
+// optional 语义：空值编码成 null，非空解到 emplace 后的值。
 struct JsonTraitOptionalLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -846,6 +878,7 @@ struct JsonTraitOptionalLike {
     }
 };
 
+// 布尔语义：只接受 true/false 字面量。
 struct JsonTraitBooleanLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -869,6 +902,7 @@ struct JsonTraitBooleanLike {
     }
 };
 
+// 算术语义：整数和浮点数都按值转换。
 struct JsonTraitArithmeticLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -891,6 +925,7 @@ struct JsonTraitArithmeticLike {
     }
 };
 
+// variant 语义：编码按当前分支；解码分支当前返回 NotImplemented。
 struct JsonTraitVariantLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -910,6 +945,7 @@ struct JsonTraitVariantLike {
     }
 };
 
+// JsonValue 语义：把内部 variant 原样交给下层 trait。
 struct JsonTraitJsonValueLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -924,6 +960,7 @@ struct JsonTraitJsonValueLike {
     }
 };
 
+// 结构体语义：通过 reflect_members 遍历 REFLECT 声明的字段。
 struct JsonTraitObjectLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -951,6 +988,7 @@ struct JsonTraitObjectLike {
     }
 };
 
+// 包装类型语义：解引用后交给 value_type 的 trait。
 struct JsonTraitWrapperLike {
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
@@ -964,8 +1002,10 @@ struct JsonTraitWrapperLike {
     }
 };
 
+// JsonValue 特化：解码时直接搬移 inner；编码分支当前未实现。
 template <>
 struct JsonTrait<JsonValue> {
+    // 按当前 variant 分支编码。
     template <class T>
     static void putValue(JsonEncoder *encoder, T const &value) {
         std::visit([&](auto const &arg) {
@@ -973,6 +1013,7 @@ struct JsonTrait<JsonValue> {
         }, value);
     }
 
+    // 直接接管 variant。
     template <class T>
     static bool getValue(JsonValue::Union &data, JsonValue &value,
                          std::error_code &ec) {
@@ -981,6 +1022,7 @@ struct JsonTrait<JsonValue> {
     }
 };
 
+// 标准库类型分派表：容器、字符串、指针、optional、variant 继承对应的 Like 实现。
 template <class T>
 struct JsonTrait<T *> : JsonTraitPointerLike {};
 
@@ -1035,6 +1077,7 @@ template <class T>
 struct JsonTrait<T, std::enable_if_t<std::is_arithmetic_v<T>>>
     : JsonTraitArithmeticLike {};
 
+// 成员协议：REFLECT 生成的 REFLECT__MEMBERS(ReflectorT&)。
 template <class Reflector, class T>
 inline std::void_t<
     decltype(std::declval<T &>().REFLECT__MEMBERS(std::declval<Reflector &>()))>
@@ -1042,6 +1085,7 @@ reflect_members(Reflector &reflector, T &value) {
     value.REFLECT__MEMBERS(reflector);
 }
 
+// 全局协议：检测 REFLECT_GLOBAL 生成的成员模板；当前项目未使用。
 template <class Reflector, class T,
           class = std::void_t<decltype(REFLECT__MEMBERS(
               std::declval<T &>(), std::declval<Reflector &>()))>>
@@ -1049,15 +1093,18 @@ inline void reflect_members(Reflector &reflector, T &value) {
     value.REFLECT__MEMBERS(value, reflector);
 }
 
+// 遗留特化：第二参数直接是 JsonValue，当前未使用。
 template <class T>
 struct JsonTrait<T, JsonValue> : JsonTraitJsonValueLike {};
 
+// 带 REFLECT 的结构体：reflect_members 可解析时启用对象编解码。
 template <class T>
 struct JsonTrait<
     T, std::void_t<decltype(reflect_members(
            std::declval<ReflectorJsonEncode &>(), std::declval<T &>()))>>
     : JsonTraitObjectLike {};
 
+// 编码入口：创建 encoder，按 JsonTrait 分派并返回 JSON 文本。
 template <class T>
 inline std::string json_encode(T const &value) {
     JsonEncoder encoder;
@@ -1065,11 +1112,13 @@ inline std::string json_encode(T const &value) {
     return encoder.json;
 }
 
+// 从已解析的 JsonValue 解码，错误写入 ec。
 template <class T>
 inline bool json_decode(JsonValue &root, T &value, std::error_code &ec) {
     return JsonTrait<T>::getValue(root.inner, value, ec);
 }
 
+// 先解析再解码，解析或字段错误都写入 ec。
 template <class T>
 inline bool json_decode(std::string_view json, T &value, std::error_code &ec) {
     auto root = jsonParse(json, ec);
@@ -1079,6 +1128,7 @@ inline bool json_decode(std::string_view json, T &value, std::error_code &ec) {
     return json_decode(*root, value, ec);
 }
 
+// 抛出型解码：失败抛 system_error；要求 T 可默认构造。
 template <class T>
 inline T json_decode(JsonValue &root) {
     T value{};
@@ -1089,6 +1139,7 @@ inline T json_decode(JsonValue &root) {
     return value;
 }
 
+// 抛出型解码：从字符串解析，失败抛 system_error。
 template <class T>
 inline T json_decode(std::string_view json) {
     T value{};

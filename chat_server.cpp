@@ -33,7 +33,7 @@ stop_source recv_timeout_stop = stop_source::make(); // 当前长轮询的取消
 void server() {
     io_context ctx;
     chdir("../static"); // 相对 build/ 定位静态文件目录
-    messages.push_back({"系统", "你好，欢迎来到小彭聊天室"});
+    messages.push_back({"系统", "你好，欢迎来到聊天室"});
     auto server = http_server::make();
     // 首页：读取并返回 index.html。
     server->get_router().route("/", [](http_server::http_request &request) {

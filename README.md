@@ -5,7 +5,7 @@
 -  co_async 协程看不懂，C++20 不支持、Linux 版本低等问题。
 
 
-基于小彭老师用，基于 C++17 回调函数的异步 HTTP 服务器的学习与开发
+基于小彭老师https://github.com/archibate/co_http  的C++17 回调函数的异步 HTTP服务器用于学习与开发
 
 
 
@@ -22,11 +22,11 @@ cd build
 ./chat_server
 ```
 
-> 小彭老师的编译环境是 GCC 9.3.0 和 Ubuntu 20.04 LTS。
+> 编译环境是 GCC 14.3.0 和 Ubuntu 22.04 LTS。
 
 然后，访问 https://127.0.0.1:8080 就能访问聊天界面了。
 
-下一期你想看什么呢？是数据库，https，还是 websocket？欢迎在视频中投票表决。
+
 
 
 

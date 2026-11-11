@@ -1,12 +1,12 @@
 # co_http
 
-基于 [archibate/co_http](https://github.com/archibate/co_http) 的 C++ 异步 HTTP 服务器与聊天室实现，用于学习 epoll、HTTP/1.1、回调式异步与 C++20 协程。
+基于小彭老师 [archibate/co_http](https://github.com/archibate/co_http) 的 C++ 异步 HTTP 服务器与聊天室实现，用于学习 epoll、HTTP/1.1、回调式异步与 C++20 协程。
 
 ## 项目来源
 
-原始项目是小彭老师的 C++17 回调式异步 HTTP 服务器。本仓库在保留回调实现的基础上，补充了稳定性修复、HTTP/1.1 协议细节、C++20 协程版本、SQLite 持久化、SSE/WebSocket、TLS，以及测试与部署脚本，便于对照学习。
+原始项目是小彭老师的 C++17 回调式异步 HTTP 服务器。我在保留回调实现的基础上，补充HTTP/1.1 协议细节、C++20 协程版本、SQLite 持久化、SSE/WebSocket、TLS便于对照学习，更进一步靠近生产项目
 
-最初没有直接使用 co_async 的协程实现，原因是其阅读门槛较高，并且依赖 C++20 与较新的 Linux 环境。因此先用 C++17 回调把 HTTP 与异步 I/O 跑通，再以独立编译目标实现协程版本，两版共用协议与业务代码。
+最初没有直接使用 co_async 的协程实现，先用 C++17 回调把 HTTP 与异步 I/O 跑通，再以独立编译目标实现协程版本，两版共用协议与业务代码。
 
 ## 功能
 

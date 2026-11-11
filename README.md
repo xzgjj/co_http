@@ -177,11 +177,11 @@ bash tests/run_stress.sh
 
 测试覆盖：
 
-- P0：RST、坏 JSON、超限请求、slowloris、EMFILE、SIGTERM 等稳定性用例
-- P1：HEAD、405、query、keep-alive、pipelining、Content-Length、chunked 等协议用例
-- P3：ETag/304、gzip、sendfile、writev、healthz、metrics
-- P4：SQLite 持久化、SSE、WebSocket、多进程
-- P5：前端接线与 TLS
+- RST、坏 JSON、超限请求、slowloris、EMFILE、SIGTERM 等稳定性用例
+- HEAD、405、query、keep-alive、pipelining、Content-Length、chunked 等协议用例
+- ETag/304、gzip、sendfile、writev、healthz、metrics
+- SQLite 持久化、SSE、WebSocket、多进程
+- 前端接线与 TLS
 
 压测示例：
 

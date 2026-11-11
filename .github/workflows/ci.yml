@@ -1,0 +1,19 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test-stress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake g++ python3 zlib1g-dev libssl-dev libsqlite3-dev
+
+      - name: Unified CI (build + unit/integration + ASan + stress)
+        run: python3 tools/ci.py ci

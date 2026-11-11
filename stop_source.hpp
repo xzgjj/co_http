@@ -36,6 +36,11 @@ struct stop_source {
         return m_control != nullptr;
     }
 
+    // 便于 if(token) 判断：持有控制块即为真。
+    explicit operator bool() const noexcept {
+        return m_control != nullptr;
+    }
+
     //  修改接口:置位停止标志并执行已注册的回调，然后清空回调。
     void request_stop() const {
         if (!m_control) {

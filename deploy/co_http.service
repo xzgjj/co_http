@@ -1,0 +1,22 @@
+[Unit]
+Description=co_http chat server (coroutine)
+Documentation=https://github.com/xzgjj/co_http
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/co_http/chat_server
+WorkingDirectory=/opt/co_http
+EnvironmentFile=-/etc/co_http.env
+Environment=PORT=8080
+Environment=STATIC_ROOT=/opt/co_http/static
+Restart=always
+RestartSec=1
+LimitNOFILE=65535
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/co_http
+
+[Install]
+WantedBy=multi-user.target

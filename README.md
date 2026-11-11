@@ -22,7 +22,40 @@ cd build
 ./chat_server
 ```
 
-> 编译环境是 GCC 14.3.0 和 Ubuntu 22.04 LTS。
+> 编译环境是 GCC 14.3.0 和 Ubuntu 22.04 LTS（本项目也已在 GCC 13.3 / Ubuntu 24.04 验证）。
+
+## 两个版本 / 测试 / CI（v4.0）
+
+| 产物 | 说明 |
+|---|---|
+| `build/chat_server` | 回调版（单线程 epoll + 回调；默认） |
+| `build/chat_server_co` | C++20 协程版（Task/awaiter/线性连接；`--selftest` 自检） |
+| `build/chat_server_mp` | 多进程实验（`--workers N`，SO_REUSEPORT 共享端口；架构对比用） |
+
+```bash
+# 一键构建 + 单元/集成测试 + ASan + 压测（本地 CI 入口）
+python3 tools/ci.py ci
+
+# 单独跑
+ctest --test-dir build --output-on-failure
+bash tests/run_all.sh           # 全套：两版 + 持久化 + 多进程
+bash tests/run_stress.sh        # 两版压测 + 长轮询
+
+# 配置（环境变量）
+# PORT STATIC_ROOT CHAT_DB(可选，SQLite 持久化) TLS_CERT/TLS_KEY(可选，HTTPS)
+# MAX_HEADER MAX_URL MAX_BODY MAX_CONN
+# REQUEST_TIMEOUT_MS WRITE_TIMEOUT_MS POLL_TIMEOUT_MS
+```
+
+可观测：`/healthz`（存活）、`/metrics`（requests/errors/active/bytes/timeouts/
+sendfile/writev/sse/ws/uptime）；静态资源支持 ETag/304/gzip/sendfile。
+
+实时推送（两版一致）：
+
+- 前端 `static/index.html`：**WebSocket 优先**（发送 + 接收 + 广播），失败自动回退 **SSE**（接收，POST /send 发送）；无第三方 CDN。
+- `GET /events?first=N`：**SSE**（`text/event-stream`，先重放从 N 开始的历史，再推新消息 + 心跳）。
+- `GET /ws`：**WebSocket**（RFC 6455 握手；文本回显 + 广播给其他 WS 客户端 + 发布到聊天 hub；ping/pong；close）。
+- TLS：设置 `TLS_CERT` / `TLS_KEY` 后同一端口提供 HTTPS（OpenSSL，非阻塞握手；TLS 下静态资源回退普通写）。
 
 然后，访问 https://127.0.0.1:8080 就能访问聊天界面了。
 

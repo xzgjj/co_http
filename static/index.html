@@ -1,118 +1,408 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-	<title>聊天室</title>
-	<meta charset="UTF-8">
-    <style>
-        .message p {
-            margin: 3px;
-        }
-        div.message {
-            margin: 0px;
-            padding: 6px;
-        }
-        div.input-bar {
-            display: flex;
-            flex-direction: row;
-            margin-top: 10px;
-        }
-        .input-user {
-            width: 10%;
-        }
-        .input-content {
-            flex: 1;
-        }
-        .input-button {
-            flex: 1;
-        }
-        .message-user {
-            color: #666666;
-            font-weight: 600;
-        }
-        .message-user.message-current-user {
-            color: #559966;
-            font-weight: 600;
-        }
-        .message-content {
-            color: #333333;
-            font-weight: 300;
-        }
-        .brief {
-            color: #444444;
-            font-weight: 300;
-        }
-        body {
-            display: flex;
-            justify-content: center;
-        }
-        #container {
-            max-width: 800px;
-        }
-        </style>
-    </head>
-    <body>
-        <div id="container">
-            <h1>聊天室</h1>
-            <p class="brief">现代 C++ 全栈聊天服务器 | <a href="https://github.com/archibate/co_http">改进自小彭老师GitHub</a></p>
-            <div class="message-list" id="messages"></div>
-            <div class="input-bar">
-                <input class="input-user" type="text" id="user" placeholder="你的昵称"/>
-                <input class="input-content" type="text" id="content" placeholder="输入你的消息..." autocomplete="off"/>
-                <button class="send-button" id="send">发送</button>
-            </div>
-        </div>
-        <script src="https://unpkg.com/jquery@3.7.1/dist/jquery.min.js"></script>
-        <script>
-        var messages_first = 0;
-        $(document).ready(function() {
-            $("#send").click(function() {
-                var user = $("#user").val().trim();
-                var content = $("#content").val().trim();
-                if (content == '') {
-                    alert("请输入昵称哦");
-                    return;
-                }
-                if (content == '') {
-                    alert("消息不能为空");
-                    return;
-                }
-                $.post("send", JSON.stringify({user, content}), function(data) {
-                    $("#content").val('');
-                    console.log("/send 返回了:", data);
-                });
-            });
-            // how to make enter on 'content' input triggers send?
-            $("#content").keypress(function(event) {
-                if (event.keyCode === 13) {
-                    $("#send").click();
-                }
-            });
-            function escapeHtml(unsafe) {
-                return unsafe
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#039;");
-            }
-            function poll() {
-                $.post("recv", JSON.stringify({first: messages_first}), function(data) {
-                    console.log("/recv 返回了:", data);
-                    var submessages = JSON.parse(data);
-                    var current_user = $("#user").val();
-                    for (var i = 0; i < submessages.length; i++) {
-                        var message = submessages[i];
-                        messages_first++;
-                        var extra_class = '';
-                        if (message.user == current_user)
-                        extra_class = ' message-current-user';
-                        $("#messages").append(`<div class="message"><p class="message-user${extra_class}">${escapeHtml(message.user)}:</p><p class="message-content">${escapeHtml(message.content)}<p></div>`);
-                    }
-                    poll();
-                });
-            }
-            poll();
-        });
-        </script>
-    </body>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>聊天室</title>
+<style>
+  :root {
+    --bg: #f5f6f7;
+    --card: #ffffff;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #2563eb;
+    --bubble-other: #f1f2f4;
+    --bubble-self: #dbeafe;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --err: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181c; --card: #1f2228; --text: #e6e8eb; --muted: #9aa0a6;
+      --line: #2d3238; --bubble-other: #262a31; --bubble-self: #1e3a5f;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+    display: flex; justify-content: center;
+  }
+  #app {
+    width: 100%; max-width: 760px; height: 100vh;
+    display: flex; flex-direction: column; background: var(--card);
+  }
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; border-bottom: 1px solid var(--line); flex: none;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  #status {
+    margin-left: auto; font-size: 12px; color: var(--muted);
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  #dot.ok { background: var(--ok); }
+  #dot.warn { background: var(--warn); }
+  #dot.err { background: var(--err); }
+  #messages {
+    flex: 1; overflow-y: auto; padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .msg { max-width: 78%; display: flex; flex-direction: column; gap: 3px; }
+  .msg.self { align-self: flex-end; align-items: flex-end; }
+  .msg .name { font-size: 12px; color: var(--muted); padding: 0 2px; }
+  .msg .bubble {
+    background: var(--bubble-other); border-radius: 12px; padding: 8px 12px;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .msg.self .bubble { background: var(--bubble-self); }
+  .msg.system { align-self: center; max-width: 90%; }
+  .msg.system .bubble {
+    background: transparent; color: var(--muted); font-size: 12px;
+    padding: 2px 6px;
+  }
+  #composer {
+    flex: none; border-top: 1px solid var(--line); padding: 10px 12px;
+    display: flex; gap: 8px;
+  }
+  .nick-field { position: relative; display: flex; width: 148px; flex: none; }
+  #nick {
+    flex: 1; min-width: 0;
+    border-top-right-radius: 0; border-bottom-right-radius: 0;
+  }
+  #nick-toggle {
+    flex: none; background: var(--bg); color: var(--muted);
+    border-left: none; border-top-left-radius: 0; border-bottom-left-radius: 0;
+    padding: 0 8px; font-size: 12px; line-height: 1;
+  }
+  #nick-menu {
+    position: absolute; top: calc(100% + 5px); left: 0; right: 0; z-index: 20;
+    margin: 0; padding: 4px; list-style: none; background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .14);
+    max-height: 240px; overflow-y: auto;
+  }
+  #nick-menu li {
+    padding: 7px 10px; border-radius: 7px; cursor: pointer; font-size: 14px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #nick-menu li:hover { background: var(--bg); }
+  #nick-menu li.active { color: var(--accent); font-weight: 600; }
+  #nick-menu li.muted { color: var(--muted); font-size: 13px; }
+  #nick-menu li .del { float: right; color: var(--muted); padding: 0 2px; }
+  #nick-menu li .del:hover { color: var(--err); }
+  #content { flex: 1; min-width: 0; }
+  input, button {
+    font: inherit; color: inherit; background: var(--bg);
+    border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px;
+  }
+  input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  button {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+    cursor: pointer; padding: 9px 16px; flex: none;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  @media (max-width: 560px) {
+    #composer { flex-wrap: wrap; }
+    .nick-field { width: 112px; }
+    .msg { max-width: 86%; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>聊天室</h1>
+    <div id="status"><span id="dot"></span><span id="status-text">连接中…</span></div>
+  </header>
+  <div id="messages" aria-live="polite"></div>
+  <div id="composer">
+    <div class="nick-field">
+      <input id="nick" type="text" maxlength="64" placeholder="昵称" autocomplete="nickname">
+      <button id="nick-toggle" type="button" aria-label="切换已保存的昵称"
+              aria-haspopup="listbox" aria-expanded="false">▾</button>
+      <ul id="nick-menu" role="listbox" hidden></ul>
+    </div>
+    <input id="content" type="text" maxlength="4096" placeholder="输入消息，回车发送" autocomplete="off">
+    <button id="send">发送</button>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var messagesEl = document.getElementById("messages");
+  var dot = document.getElementById("dot");
+  var statusText = document.getElementById("status-text");
+  var nickEl = document.getElementById("nick");
+  var contentEl = document.getElementById("content");
+  var sendBtn = document.getElementById("send");
+
+  var cursor = 0;          // 已渲染的消息条数（绝对序号）
+  var mode = "connecting"; // websocket | sse | connecting
+  var ws = null;
+  var es = null;
+  var reconnectDelay = 500;
+  var allMessages = []; // 已渲染消息（切换昵称时整体重绘，重算"自己/他人"）
+
+  // ---------- 昵称保存 / 快速切换 ----------
+  var NICKS_KEY = "chat-nicks";
+  var savedNicks = loadNicks();
+  var nickToggle = document.getElementById("nick-toggle");
+  var nickMenu = document.getElementById("nick-menu");
+
+  function loadNicks() {
+    try {
+      var list = JSON.parse(localStorage.getItem(NICKS_KEY) || "[]");
+      if (!Array.isArray(list)) return [];
+      return list.filter(function (n) { return typeof n === "string" && n.trim(); });
+    } catch (e) { return []; }
+  }
+  function persistNicks() {
+    localStorage.setItem(NICKS_KEY, JSON.stringify(savedNicks));
+  }
+  function nickValue() { return nickEl.value.trim(); }
+  function rememberNick(name) {
+    name = (name || "").trim();
+    if (!name) return;
+    if (savedNicks.indexOf(name) < 0) {
+      savedNicks.push(name);
+      if (savedNicks.length > 10) savedNicks.shift();
+      persistNicks();
+    }
+    renderNickMenu();
+  }
+  function selectNick(name) {
+    nickEl.value = name;
+    localStorage.setItem("chat-nick", name);
+    renderAll();      // 切换账号后重算左右位置
+    renderNickMenu();
+    closeNickMenu();
+    contentEl.focus();
+  }
+  function renderAll() {
+    messagesEl.innerHTML = "";
+    for (var i = 0; i < allMessages.length; i++) renderMessage(allMessages[i]);
+  }
+  function renderNickMenu() {
+    nickMenu.innerHTML = "";
+    var current = nickValue();
+    if (!savedNicks.length) {
+      var empty = document.createElement("li");
+      empty.className = "muted";
+      empty.textContent = "暂无保存的昵称";
+      nickMenu.appendChild(empty);
+    }
+    savedNicks.forEach(function (name) {
+      var li = document.createElement("li");
+      li.textContent = name;
+      if (name === current) li.className = "active";
+      var del = document.createElement("span");
+      del.className = "del";
+      del.textContent = "×";
+      del.title = "删除该昵称";
+      del.addEventListener("click", function (event) {
+        event.stopPropagation();
+        savedNicks = savedNicks.filter(function (x) { return x !== name; });
+        persistNicks();
+        renderNickMenu();
+      });
+      li.appendChild(del);
+      li.addEventListener("click", function () { selectNick(name); });
+      nickMenu.appendChild(li);
+    });
+    var save = document.createElement("li");
+    save.className = "muted";
+    save.textContent = "＋ 保存当前昵称";
+    save.addEventListener("click", function () {
+      rememberNick(nickValue());
+      closeNickMenu();
+      contentEl.focus();
+    });
+    nickMenu.appendChild(save);
+  }
+  function openNickMenu() {
+    renderNickMenu();
+    nickMenu.hidden = false;
+    nickToggle.setAttribute("aria-expanded", "true");
+  }
+  function closeNickMenu() {
+    nickMenu.hidden = true;
+    nickToggle.setAttribute("aria-expanded", "false");
+  }
+  nickToggle.addEventListener("click", function (event) {
+    event.stopPropagation();
+    if (nickMenu.hidden) openNickMenu(); else closeNickMenu();
+  });
+  document.addEventListener("click", function (event) {
+    if (!nickMenu.hidden && !nickMenu.contains(event.target) && event.target !== nickToggle) {
+      closeNickMenu();
+    }
+  });
+
+  // 初始化：恢复上次昵称；旧版本只存了单个 chat-nick，这里迁移进列表。
+  (function () {
+    var last = localStorage.getItem("chat-nick") || "";
+    if (last) nickEl.value = last;
+    if (last && savedNicks.indexOf(last) < 0) {
+      savedNicks.push(last);
+      persistNicks();
+    }
+    renderNickMenu();
+  })();
+  nickEl.addEventListener("input", function () {
+    localStorage.setItem("chat-nick", nickEl.value);
+  });
+
+  function setStatus(state, text) {
+    dot.className = state;
+    statusText.textContent = text;
+  }
+
+  function renderMessage(msg) {
+    var wrap = document.createElement("div");
+    var mine = msg.user === nickEl.value.trim();
+    wrap.className = "msg" + (msg.user === "系统" ? " system" : "") + (mine ? " self" : "");
+    if (msg.user !== "系统") {
+      var name = document.createElement("div");
+      name.className = "name";
+      name.textContent = msg.user;
+      wrap.appendChild(name);
+    }
+    var bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = msg.content;
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function renderMessages(list) {
+    if (!Array.isArray(list)) return;
+    for (var i = 0; i < list.length; i++) {
+      allMessages.push(list[i]);
+      renderMessage(list[i]);
+      cursor++;
+    }
+  }
+
+  function appendOne(msg) {
+    allMessages.push(msg);
+    renderMessage(msg);
+    cursor++;
+  }
+
+  // 先用 /recv 拉一次历史（游标 0，服务端最多 1000 条）。
+  function loadHistory(done) {
+    fetch("/recv", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ first: 0 })
+    }).then(function (r) { return r.json(); })
+      .then(function (list) {
+        renderMessages(list);
+        done();
+      })
+      .catch(function () { done(); });
+  }
+
+  // ---------- WebSocket（发送 + 接收，服务端回显/广播） ----------
+  function connectWebSocket() {
+    mode = "connecting";
+    var proto = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(proto + "//" + location.host + "/ws");
+    ws.onopen = function () {
+      mode = "websocket";
+      reconnectDelay = 500;
+      setStatus("ok", "WebSocket 已连接");
+    };
+    ws.onmessage = function (event) {
+      try {
+        var msg = JSON.parse(event.data);
+        if (msg && msg.user && typeof msg.content === "string") appendOne(msg);
+      } catch (e) { /* 非 JSON 帧忽略 */ }
+    };
+    ws.onclose = function () {
+      if (mode === "websocket") {
+        setStatus("warn", "WebSocket 断开，切换 SSE 回退…");
+        connectSSE();
+      }
+    };
+    ws.onerror = function () {
+      if (mode !== "websocket") {
+        setStatus("warn", "WebSocket 不可用，切换 SSE 回退…");
+        connectSSE();
+      }
+    };
+  }
+
+  // ---------- SSE（只收；发送走 POST /send） ----------
+  function connectSSE() {
+    mode = "sse";
+    if (es) es.close();
+    es = new EventSource("/events?first=" + cursor);
+    es.onopen = function () {
+      setStatus("ok", "SSE 已连接");
+      reconnectDelay = 500;
+    };
+    es.onmessage = function (event) {
+      try { renderMessages(JSON.parse(event.data)); } catch (e) {}
+    };
+    es.onerror = function () {
+      setStatus("warn", "SSE 断开，" + Math.round(reconnectDelay / 1000) + "s 后重连");
+      es.close();
+      es = null;
+      setTimeout(connectSSE, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 8000);
+    };
+  }
+
+  function sendMessage() {
+    var user = nickEl.value.trim();
+    var content = contentEl.value.trim();
+    if (!user) { nickEl.focus(); return; }
+    if (!content) { contentEl.focus(); return; }
+    rememberNick(user); // 发送时自动保存昵称
+    if (mode === "websocket" && ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ user: user, content: content }));
+      // 自己的消息由服务端回显后渲染，避免重复
+    } else {
+      fetch("/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: user, content: content })
+      }).then(function () {
+        // SSE 会推送回来，这里不乐观追加，避免重复
+      }).catch(function () {
+        setStatus("err", "发送失败");
+      });
+    }
+    contentEl.value = "";
+    contentEl.focus();
+  }
+
+  sendBtn.addEventListener("click", sendMessage);
+  contentEl.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") { event.preventDefault(); sendMessage(); }
+  });
+  nickEl.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      rememberNick(nickValue());
+      contentEl.focus();
+    }
+  });
+  window.addEventListener("beforeunload", function () {
+    if (ws) ws.close();
+    if (es) es.close();
+  });
+
+  loadHistory(function () { connectWebSocket(); });
+})();
+</script>
+</body>
 </html>

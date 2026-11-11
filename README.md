@@ -227,19 +227,7 @@ curl -s http://127.0.0.1:8080/healthz
 
 更完整的部署说明见 `deploy/README.md`。生产环境建议在前面加 Nginx 或 Caddy，由反向代理负责 TLS、gzip 与连接数限制。
 
-## 文档
 
-- [HTTP 机制与模块分析](docs/HTTP机制与模块分析.md)
-- [架构与 HTTP 机制图示](<docs/co_http：架构与 HTTP 机制图示.md>)
-- [服务器演进设计方案](docs/server-evolution-design.md)
-- [P0 阶段总结](docs/p0-phase-summary.md)
-- [P1–P4 阶段总结](docs/p1-p4-phase-summary.md)
-
-## 分支与版本
-
-- `master`：当前主分支
-- `v1` / `v2` / `v3`：2024 年的历史版本分支，保留用于对照
-- 版本号由 `CMakeLists.txt` 中的 `project(... VERSION 4.0)` 定义，可通过 `--version` 查看
 
 ## 已知限制
 
